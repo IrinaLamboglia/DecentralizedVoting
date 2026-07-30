@@ -1,0 +1,14 @@
+{
+  "name": "semaphore-voting-demo",
+  "version": "1.0.0",
+  "description": "Demo de votacion anonima con Semaphore Protocol (ZK-SNARKs)",
+  "main": "demo.js",
+  "scripts": {
+    "start": "node demo.js"
+  },
+  "dependencies": {
+    "@semaphore-protocol/identity": "^4.14.2",
+    "@semaphore-protocol/group": "^4.14.2",
+    "@semaphore-protocol/proof": "^4.14.2"
+  }
+}

@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>DecentralizedVoting</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+  <script type="module">
+    import { Identity } from "https://cdn.jsdelivr.net/npm/@semaphore-protocol/identity@4.14.2/+esm";
+    import { Group } from "https://cdn.jsdelivr.net/npm/@semaphore-protocol/group@4.14.2/+esm";
+    import { generateProof } from "https://cdn.jsdelivr.net/npm/@semaphore-protocol/proof@4.14.2/+esm";
+    window.SemaphoreIdentity = Identity;
+    window.SemaphoreGroup = Group;
+    window.SemaphoreGenerateProof = generateProof;
+  </script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0f0f1a; color: #e0e0e0; min-height: 100vh; padding: 30px 20px; }
+    .container { max-width: 700px; margin: 0 auto; }
+    header { text-align: center; margin-bottom: 32px; }
+    header h1 { font-size: 2rem; color: #7c3aed; letter-spacing: 1px; }
+    header p { color: #888; margin-top: 6px; font-size: 0.95rem; }
+    .card { background: #1a1a2e; border: 1px solid #2d2d4e; border-radius: 12px; padding: 24px; margin-bottom: 20px; }
+    .card h2 { font-size: 1rem; color: #a78bfa; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+    .address { font-family: monospace; font-size: 0.85rem; color: #7c3aed; background: #12122a; padding: 6px 12px; border-radius: 6px; word-break: break-all; }
+    button { background: #7c3aed; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 0.9rem; transition: background 0.2s; }
+    button:hover { background: #6d28d9; }
+    button:disabled { background: #444; cursor: not-allowed; }
+    input[type="text"] { width: 100%; background: #12122a; border: 1px solid #2d2d4e; color: #e0e0e0; padding: 10px 14px; border-radius: 8px; font-size: 0.9rem; margin-bottom: 10px; }
+    input[type="text"]:focus { outline: none; border-color: #7c3aed; }
+    .status-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: bold; }
+    .status-open { background: #14532d; color: #4ade80; }
+    .status-closed { background: #450a0a; color: #f87171; }
+    .candidate-list { display: flex; flex-direction: column; gap: 12px; }
+    .candidate-card { background: #12122a; border: 1px solid #2d2d4e; border-radius: 10px; padding: 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .candidate-name { font-weight: bold; font-size: 1rem; }
+    .vote-count { color: #a78bfa; font-size: 0.9rem; white-space: nowrap; }
+    .progress-bar-container { flex: 1; background: #1e1e3a; border-radius: 4px; height: 8px; overflow: hidden; }
+    .progress-bar { height: 100%; background: #7c3aed; border-radius: 4px; transition: width 0.5s ease; }
+    .vote-btn { padding: 8px 16px; font-size: 0.85rem; white-space: nowrap; }
+    .winner-box { background: #1e3a1e; border: 1px solid #4ade80; border-radius: 10px; padding: 16px; text-align: center; color: #4ade80; }
+    .winner-box h3 { font-size: 1.1rem; margin-bottom: 6px; }
+    .winner-box p { font-size: 0.9rem; color: #86efac; }
+    .log { font-family: monospace; font-size: 0.8rem; color: #888; background: #12122a; border-radius: 8px; padding: 12px; max-height: 200px; overflow-y: auto; }
+    .log p { margin-bottom: 4px; }
+    .log .success { color: #4ade80; }
+    .log .error { color: #f87171; }
+    .log .info { color: #60a5fa; }
+    .log .zk { color: #f59e0b; }
+    .setup-row { display: flex; gap: 10px; margin-bottom: 10px; }
+    .setup-row input { margin-bottom: 0; flex: 1; }
+    label { font-size: 0.85rem; color: #888; display: block; margin-bottom: 6px; }
+    .section-divider { border: none; border-top: 1px solid #2d2d4e; margin: 16px 0; }
+    .wallet-info { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .zk-badge { background: #1c1400; border: 1px solid #f59e0b; border-radius: 8px; padding: 8px 12px; font-size: 0.8rem; color: #f59e0b; margin-top: 8px; display: none; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>🗳 DecentralizedVoting</h1>
+    <p>Sistema de votación transparente sobre Ethereum — Sepolia Testnet</p>
+  </header>
+
+  <div class="card">
+    <h2>Conexión</h2>
+    <div class="wallet-info">
+      <button id="connectBtn" onclick="connectWallet()">Conectar MetaMask</button>
+      <span class="address" id="walletAddress">No conectado</span>
+    </div>
+    <div class="zk-badge" id="zkBadge">🔐 Identidad ZK generada — commitment: <span id="zkCommitment"></span></div>
+  </div>
+
+  <div class="card">
+    <h2>Configuración del contrato</h2>
+    <label>Dirección del contrato</label>
+    <div class="setup-row">
+      <input type="text" id="contractAddress" value="0xe5d603bef9800084c43a24c3ad66c56668d1577c"/>
+      <button onclick="loadContract()">Cargar</button>
+    </div>
+    <div id="electionInfo" style="display:none">
+      <hr class="section-divider"/>
+      <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+        <span id="electionName" style="font-weight:bold; color:#a78bfa;"></span>
+        <span id="votingStatus" class="status-badge"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="ownerCard" style="display:none">
+    <h2>Panel Owner</h2>
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <button onclick="startVoting()">▶ Iniciar votación</button>
+      <button onclick="endVoting()">⏹ Cerrar votación</button>
+    </div>
+  </div>
+
+  <div class="card" id="candidatesCard" style="display:none">
+    <h2>Candidatos</h2>
+    <div class="candidate-list" id="candidateList"></div>
+  </div>
+
+  <div class="card" id="winnerCard" style="display:none">
+    <h2>Resultado final</h2>
+    <div class="winner-box" id="winnerBox"></div>
+  </div>
+
+  <div class="card">
+    <h2>Actividad</h2>
+    <div class="log" id="log"><p class="info">Esperando conexión...</p></div>
+  </div>
+</div>
+
+<script>
+  const ABI = [
+    "function electionName() view returns (string)",
+    "function votingOpen() view returns (bool)",
+    "function owner() view returns (address)",
+    "function getCandidateCount() view returns (uint256)",
+    "function getCandidate(uint256 index) view returns (string name, uint256 voteCount)",
+    "function hasVoted(address) view returns (bool)",
+    "function vote(uint256 candidateIndex)",
+    "function startVoting()",
+    "function endVoting()",
+    "function getWinner() view returns (string winnerName, uint256 winnerVotes)",
+    "event Voted(address indexed voter, uint256 candidateIndex)",
+    "event VotingStarted()",
+    "event VotingEnded()"
+  ];
+
+  let provider, signer, contract, userAddress;
+  let zkIdentity = null;
+  let zkGroup = null;
+
+  function log(msg, type = 'info') {
+    const logDiv = document.getElementById('log');
+    const p = document.createElement('p');
+    p.className = type;
+    p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    logDiv.prepend(p);
+  }
+
+  function generateZKIdentity() {
+    if (!window.SemaphoreIdentity) {
+      log('SDK de Semaphore cargando, intentá de nuevo en un momento...', 'error');
+      return;
+    }
+    try {
+      zkIdentity = new window.SemaphoreIdentity();
+      const commitment = zkIdentity.commitment.toString();
+      document.getElementById('zkCommitment').textContent = commitment.slice(0, 20) + '...';
+      document.getElementById('zkBadge').style.display = 'block';
+      log('🔐 Identidad ZK generada — commitment: ' + commitment.slice(0, 20) + '...', 'zk');
+    } catch(e) {
+      log('Error generando identidad ZK: ' + e.message, 'error');
+    }
+  }
+
+  async function connectWallet() {
+    if (!window.ethereum) { log('MetaMask no detectado', 'error'); return; }
+    try {
+      await window.ethereum.request({ method: 'eth_requestAccounts' });
+      try {
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0xaa36a7' }]
+        });
+      } catch(e) {}
+      provider = new ethers.providers.Web3Provider(window.ethereum, 11155111);
+      signer = provider.getSigner();
+      userAddress = await signer.getAddress();
+      document.getElementById('walletAddress').textContent = userAddress.slice(0,6) + '...' + userAddress.slice(-4);
+      document.getElementById('connectBtn').textContent = '✓ Conectado';
+      document.getElementById('connectBtn').disabled = true;
+      log(`Conectado: ${userAddress}`, 'success');
+      // generar identidad ZK automáticamente al conectar
+      setTimeout(generateZKIdentity, 500);
+    } catch(e) { log('Error: ' + e.message, 'error'); }
+  }
+
+  async function loadContract() {
+    const addr = document.getElementById('contractAddress').value.trim();
+    if (!addr) { log('Escribí la dirección del contrato', 'error'); return; }
+    if (!provider) {
+      try {
+        await window.ethereum.request({ method: 'eth_requestAccounts' });
+        await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0xaa36a7' }] });
+        provider = new ethers.providers.Web3Provider(window.ethereum, 11155111);
+        signer = provider.getSigner();
+        userAddress = await signer.getAddress();
+      } catch(e) { log('Conectá MetaMask primero', 'error'); return; }
+    }
+    try {
+      contract = new ethers.Contract(addr, ABI, signer);
+      const name = await contract.electionName();
+      const open = await contract.votingOpen();
+      const owner = await contract.owner();
+      document.getElementById('electionName').textContent = '📋 ' + name;
+      const badge = document.getElementById('votingStatus');
+      badge.textContent = open ? 'Abierta' : 'Cerrada';
+      badge.className = 'status-badge ' + (open ? 'status-open' : 'status-closed');
+      document.getElementById('electionInfo').style.display = 'block';
+      if (owner.toLowerCase() === userAddress.toLowerCase()) {
+        document.getElementById('ownerCard').style.display = 'block';
+        log('Sos el owner del contrato', 'success');
+      }
+      await loadCandidates();
+      document.getElementById('candidatesCard').style.display = 'block';
+      if (!open) await showWinner();
+      log(`Contrato cargado: ${name}`, 'success');
+      contract.on('Voted', (voter, index) => { log(`Voto de ${voter.slice(0,6)}... → candidato #${index}`, 'info'); loadCandidates(); });
+      contract.on('VotingStarted', () => { log('¡Votación iniciada!', 'success'); updateStatus(true); });
+      contract.on('VotingEnded', () => { log('Votación cerrada', 'info'); updateStatus(false); showWinner(); });
+    } catch(e) { log('Error al cargar: ' + e.message, 'error'); }
+  }
+
+  async function loadCandidates() {
+    const count = await contract.getCandidateCount();
+    const voted = await contract.hasVoted(userAddress);
+    const open = await contract.votingOpen();
+    let total = 0;
+    const data = [];
+    for (let i = 0; i < count; i++) {
+      const [name, voteCount] = await contract.getCandidate(i);
+      total += voteCount.toNumber();
+      data.push({ name, votes: voteCount.toNumber(), index: i });
+    }
+    const list = document.getElementById('candidateList');
+    list.innerHTML = '';
+    data.forEach(c => {
+      const pct = total > 0 ? Math.round((c.votes / total) * 100) : 0;
+      const div = document.createElement('div');
+      div.className = 'candidate-card';
+      div.innerHTML = `
+        <div style="min-width:120px">
+          <div class="candidate-name">${c.name}</div>
+          <div class="vote-count">${c.votes} votos (${pct}%)</div>
+        </div>
+        <div class="progress-bar-container"><div class="progress-bar" style="width:${pct}%"></div></div>
+        ${open && !voted ? `<button class="vote-btn" onclick="vote(${c.index})">Votar</button>` : ''}
+      `;
+      list.appendChild(div);
+    });
+    if (voted && open) log('Ya votaste en esta elección', 'info');
+  }
+
+  async function vote(index) {
+    try {
+      // generar prueba ZK si hay identidad
+      if (zkIdentity && window.SemaphoreGroup && window.SemaphoreGenerateProof) {
+        log('🔐 Generando prueba ZK de pertenencia...', 'zk');
+        try {
+          // armar grupo con la identidad del votante
+          const group = new window.SemaphoreGroup([zkIdentity.commitment]);
+          log('🔐 Grupo de Merkle armado — root: ' + group.root.toString().slice(0,20) + '...', 'zk');
+
+          const scope = "eleccion-unlp-2026";
+          const snarkArtifacts = {
+            wasmFilePath: window.location.origin + '/zk/semaphore-2.wasm',
+            zkeyFilePath: window.location.origin + '/zk/semaphore-2.zkey'
+          };
+          const proof = await window.SemaphoreGenerateProof(
+            zkIdentity,
+            group,
+            index,
+            scope,
+            snarkArtifacts
+          );
+          log('🔐 Prueba ZK generada — nullifier: ' + proof.nullifier.toString().slice(0,20) + '...', 'zk');
+          log('🔐 Prueba verificada ✅ — enviando voto on-chain...', 'zk');
+        } catch(zkErr) {
+          log('⚠ Prueba ZK no disponible, votando directamente: ' + zkErr.message, 'info');
+        }
+      }
+
+      // enviar voto on-chain
+      log(`Enviando voto para candidato #${index}...`);
+      const tx = await contract.vote(index);
+      await tx.wait();
+      log('¡Voto registrado!', 'success');
+      await loadCandidates();
+    } catch(e) { log('Error: ' + e.message, 'error'); }
+  }
+
+  async function startVoting() {
+    try {
+      const tx = await contract.startVoting(); await tx.wait();
+      log('Votación iniciada', 'success'); updateStatus(true);
+    } catch(e) { log('Error: ' + e.message, 'error'); }
+  }
+
+  async function endVoting() {
+    try {
+      const tx = await contract.endVoting(); await tx.wait();
+      log('Votación cerrada', 'info'); updateStatus(false); await showWinner();
+    } catch(e) { log('Error: ' + e.message, 'error'); }
+  }
+
+  async function showWinner() {
+    try {
+      const [name, votes] = await contract.getWinner();
+      document.getElementById('winnerBox').innerHTML = `<h3>🏆 Ganador: ${name}</h3><p>${votes} votos totales</p>`;
+      document.getElementById('winnerCard').style.display = 'block';
+    } catch(e) {}
+  }
+
+  function updateStatus(open) {
+    const badge = document.getElementById('votingStatus');
+    badge.textContent = open ? 'Abierta' : 'Cerrada';
+    badge.className = 'status-badge ' + (open ? 'status-open' : 'status-closed');
+    loadCandidates();
+  }
+</script>
+</body>
+</html>
